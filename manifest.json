@@ -1,0 +1,13 @@
+{
+  "name": "Trapped At Work 打工仔失自由",
+  "short_name": "Trapped",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#F0F4F2",
+  "theme_color": "#2E8B6E",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

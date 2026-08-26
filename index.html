@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+<title>Trapped At Work</title>
+<meta name="description" content="Track annual leave balances and work reminders." />
+<meta name="theme-color" content="#2E8B6E" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="Trapped At Work" />
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<link rel="icon" href="icons/icon-192.png" />
+<link rel="stylesheet" href="style.css?v=3" />
+</head>
+<body>
+
+<header class="app-header">
+  <h1 data-i18n="appTitle">Trapped At Work</h1>
+  <button id="settings-btn" class="icon-btn" aria-label="Settings" title="Settings">
+    <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M19.4 13a7.4 7.4 0 0 0 .06-1 7.4 7.4 0 0 0-.06-1l2.1-1.6a.5.5 0 0 0 .12-.65l-2-3.4a.5.5 0 0 0-.6-.22l-2.5 1a7.6 7.6 0 0 0-1.7-1L14.4 2.4a.5.5 0 0 0-.5-.4h-4a.5.5 0 0 0-.5.4L9 5.13a7.6 7.6 0 0 0-1.7 1l-2.5-1a.5.5 0 0 0-.6.22l-2 3.4a.5.5 0 0 0 .12.65L4.4 11a7.4 7.4 0 0 0 0 2l-2.1 1.6a.5.5 0 0 0-.12.65l2 3.4a.5.5 0 0 0 .6.22l2.5-1a7.6 7.6 0 0 0 1.7 1l.4 2.73a.5.5 0 0 0 .5.4h4a.5.5 0 0 0 .5-.4l.4-2.73a7.6 7.6 0 0 0 1.7-1l2.5 1a.5.5 0 0 0 .6-.22l2-3.4a.5.5 0 0 0-.12-.65L19.4 13ZM12 15.5A3.5 3.5 0 1 1 15.5 12 3.5 3.5 0 0 1 12 15.5Z"/></svg>
+  </button>
+</header>
+
+<main id="main">
+
+  <!-- DASHBOARD -->
+  <section id="dashboard-screen" class="screen">
+    <h2 class="section-title" data-i18n="dashLeaveTitle" style="margin-top:0">Leave balance</h2>
+    <div id="dash-leave-cards" class="leave-cards"></div>
+    <p id="dash-leave-empty" class="empty-msg" data-i18n="dashLeaveEmpty" hidden>No leave types set up.</p>
+
+    <div class="section-head">
+      <h2 class="section-title" data-i18n="dashCpdTitle">CPD progress</h2>
+      <button class="link-btn" data-goto="cpd-screen" data-i18n="dashSeeAll">See all</button>
+    </div>
+    <div id="dash-cpd-card"></div>
+
+    <div class="section-head">
+      <h2 class="section-title" data-i18n="dashRemindersTitle">Upcoming reminders</h2>
+      <button class="link-btn" data-goto="reminders-screen" data-i18n="dashSeeAll">See all</button>
+    </div>
+    <ul id="dash-reminders-list" class="record-list"></ul>
+    <p id="dash-reminders-empty" class="empty-msg" data-i18n="dashRemindersEmpty" hidden>No reminders yet.</p>
+
+    <div class="section-head">
+      <h2 class="section-title" data-i18n="dashUpcomingLeaveTitle">Upcoming leave</h2>
+      <button class="link-btn" data-goto="leave-screen" data-i18n="dashSeeAll">See all</button>
+    </div>
+    <ul id="dash-upcoming-leave-list" class="record-list"></ul>
+    <p id="dash-upcoming-leave-empty" class="empty-msg" data-i18n="dashUpcomingLeaveEmpty" hidden>No upcoming leave.</p>
+  </section>
+
+  <!-- LEAVE -->
+  <section id="leave-screen" class="screen" hidden>
+    <div class="year-switch">
+      <button id="leave-year-prev" class="icon-btn" aria-label="Previous year">
+        <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M15.4 7.4 14 6l-6 6 6 6 1.4-1.4L10.8 12z"/></svg>
+      </button>
+      <span id="leave-year-label" class="year-label">2026</span>
+      <button id="leave-year-next" class="icon-btn" aria-label="Next year">
+        <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M8.6 16.6 10 18l6-6-6-6-1.4 1.4L13.2 12z"/></svg>
+      </button>
+    </div>
+    <div id="leave-cards" class="leave-cards"></div>
+    <p id="leave-cards-empty" class="empty-msg" data-i18n="dashLeaveEmpty" hidden>No leave types set up.</p>
+
+    <h2 class="section-title" data-i18n="leaveHistoryTitle">Leave history</h2>
+    <ul id="leave-history-list" class="record-list"></ul>
+    <p id="leave-history-empty" class="empty-msg" data-i18n="leaveHistoryEmpty" hidden>No leave logged.</p>
+  </section>
+
+  <!-- LEAVE FORM -->
+  <section id="leave-form-screen" class="screen" hidden>
+    <form id="leave-form">
+      <h2 id="leave-form-title" data-i18n="leaveFormTitleAdd">Log Leave</h2>
+
+      <label for="lf-type" data-i18n="fLeaveType">Leave type</label>
+      <select id="lf-type" required></select>
+
+      <div class="field-row">
+        <div class="field-col">
+          <label for="lf-start" data-i18n="fStartDate">Start date</label>
+          <input id="lf-start" type="date" required />
+        </div>
+        <div class="field-col">
+          <label for="lf-end" data-i18n="fEndDate">End date</label>
+          <input id="lf-end" type="date" required />
+        </div>
+      </div>
+
+      <label for="lf-days" data-i18n="fDays">Days</label>
+      <input id="lf-days" type="number" min="0.5" step="0.5" required />
+      <p class="hint" data-i18n="fDaysHint">Auto-filled from dates — adjust for half days.</p>
+
+      <label for="lf-note" data-i18n="fNote">Note (optional)</label>
+      <textarea id="lf-note" rows="2"></textarea>
+
+      <div class="form-actions">
+        <button type="button" id="leave-cancel-btn" class="btn btn-secondary" data-i18n="btnCancel">Cancel</button>
+        <button type="submit" class="btn btn-primary" data-i18n="btnSave">Save</button>
+      </div>
+      <button type="button" id="leave-delete-btn" class="btn btn-danger" data-i18n="btnDelete" hidden>Delete</button>
+    </form>
+  </section>
+
+  <!-- CPD -->
+  <section id="cpd-screen" class="screen" hidden>
+    <div class="ring-card">
+      <div class="ring-wrap">
+        <svg id="ring-svg" viewBox="0 0 140 140" width="150" height="150">
+          <circle cx="70" cy="70" r="60" class="ring-bg"/>
+          <circle id="ring-progress" cx="70" cy="70" r="60" class="ring-fg"/>
+        </svg>
+        <div class="ring-center">
+          <span id="ring-points">0</span>
+          <span class="ring-label">/ <span id="ring-target">10</span> <span data-i18n="cpdPtsLabel">pts</span></span>
+        </div>
+      </div>
+      <p id="cpd-cycle-range" class="cycle-range">—</p>
+      <p id="cpd-ring-status" class="ring-status" data-i18n="cpdSetupPrompt">Set your CPD start date in Settings to begin.</p>
+    </div>
+
+    <div class="stat-row">
+      <div class="stat-tile">
+        <span id="cpd-stat-total" class="stat-num">0</span>
+        <span class="stat-lbl" data-i18n="cpdStatTotal">Total pts since start</span>
+      </div>
+      <div class="stat-tile">
+        <span id="cpd-stat-cycles" class="stat-num">0</span>
+        <span class="stat-lbl" data-i18n="cpdStatCycles">Cycles tracked</span>
+      </div>
+      <div class="stat-tile">
+        <span id="cpd-stat-days" class="stat-num">—</span>
+        <span class="stat-lbl" data-i18n="cpdStatDays">Days left this cycle</span>
+      </div>
+    </div>
+
+    <h2 class="section-title" data-i18n="cpdPastCycles">Past cycles</h2>
+    <ul id="cpd-cycle-history" class="cycle-history"></ul>
+
+    <h2 class="section-title" data-i18n="cpdRecordsTitle">CPD records</h2>
+    <div class="records-toolbar">
+      <select id="cpd-cycle-filter"></select>
+      <input id="cpd-search" type="search" data-i18n-placeholder="cpdSearchPlaceholder" placeholder="Search records…" />
+    </div>
+    <ul id="cpd-records-list" class="record-list"></ul>
+    <p id="cpd-records-empty" class="empty-msg" data-i18n="cpdRecordsEmpty" hidden>No CPD records yet.</p>
+  </section>
+
+  <!-- CPD FORM -->
+  <section id="cpd-form-screen" class="screen" hidden>
+    <form id="cpd-form">
+      <h2 id="cpd-form-title" data-i18n="cpdFormTitleAdd">Add CPD Record</h2>
+
+      <label for="cf-title" data-i18n="fCpdTitle">What (activity / topic)</label>
+      <input id="cf-title" type="text" required />
+
+      <div class="field-row">
+        <div class="field-col">
+          <label for="cf-date" data-i18n="fCpdDate">When</label>
+          <input id="cf-date" type="date" required />
+        </div>
+        <div class="field-col">
+          <label for="cf-points" data-i18n="fCpdPoints">Points</label>
+          <input id="cf-points" type="number" min="0" step="0.5" required />
+        </div>
+      </div>
+
+      <label for="cf-category" data-i18n="fCpdCategory">Category</label>
+      <select id="cf-category"></select>
+
+      <label for="cf-location" data-i18n="fCpdLocation">Where (venue / organizer)</label>
+      <input id="cf-location" type="text" />
+
+      <label for="cf-notes" data-i18n="fNote">Notes (optional)</label>
+      <textarea id="cf-notes" rows="3"></textarea>
+
+      <label for="cf-file" data-i18n="fCpdFile">Proof of approval / attendance (optional)</label>
+      <input id="cf-file" type="file" accept="image/*,.pdf" />
+      <div id="cf-file-preview" class="file-preview" hidden></div>
+
+      <div class="form-actions">
+        <button type="button" id="cpd-cancel-btn" class="btn btn-secondary" data-i18n="btnCancel">Cancel</button>
+        <button type="submit" class="btn btn-primary" data-i18n="btnSave">Save</button>
+      </div>
+      <button type="button" id="cpd-delete-btn" class="btn btn-danger" data-i18n="btnDelete" hidden>Delete</button>
+    </form>
+  </section>
+
+  <!-- REMINDERS -->
+  <section id="reminders-screen" class="screen" hidden>
+    <ul id="reminders-list" class="record-list"></ul>
+    <p id="reminders-empty" class="empty-msg" data-i18n="remindersEmpty" hidden>No reminders yet.</p>
+
+    <div id="reminders-done-wrap" hidden>
+      <h2 class="section-title" data-i18n="remindersDoneTitle">Completed</h2>
+      <ul id="reminders-done-list" class="record-list"></ul>
+    </div>
+  </section>
+
+  <!-- REMINDER FORM -->
+  <section id="reminder-form-screen" class="screen" hidden>
+    <form id="reminder-form">
+      <h2 id="reminder-form-title" data-i18n="reminderFormTitleAdd">Add Reminder</h2>
+
+      <label for="rf-title" data-i18n="fTitle">Title</label>
+      <input id="rf-title" type="text" required />
+
+      <label for="rf-due" data-i18n="fDueDate">Due date</label>
+      <input id="rf-due" type="date" required />
+
+      <label for="rf-note" data-i18n="fNote">Note (optional)</label>
+      <textarea id="rf-note" rows="2"></textarea>
+
+      <div class="form-actions">
+        <button type="button" id="reminder-cancel-btn" class="btn btn-secondary" data-i18n="btnCancel">Cancel</button>
+        <button type="submit" class="btn btn-primary" data-i18n="btnSave">Save</button>
+      </div>
+      <button type="button" id="reminder-delete-btn" class="btn btn-danger" data-i18n="btnDelete" hidden>Delete</button>
+    </form>
+  </section>
+
+  <!-- SETTINGS -->
+  <section id="settings-screen" class="screen" hidden>
+    <h2 data-i18n="settingsTitle">Settings</h2>
+
+    <label data-i18n="settingsLanguage">Language</label>
+    <div class="lang-toggle">
+      <button id="lang-en-btn" class="seg-btn" data-lang="en">English</button>
+      <button id="lang-zh-btn" class="seg-btn" data-lang="zh">繁中</button>
+    </div>
+
+    <h3 class="section-title" data-i18n="settingsCpdTitle">CPD tracking</h3>
+    <form id="cpd-settings-form">
+      <label for="cs-start" data-i18n="fCpdStart">CPD tracking start date</label>
+      <input id="cs-start" type="date" required />
+      <p class="hint" data-i18n="cpdStartHint">Your CPD year renews every 12 months from this date.</p>
+
+      <label for="cs-target" data-i18n="fCpdTarget">Annual point target</label>
+      <input id="cs-target" type="number" min="1" step="0.5" required value="10" />
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary" data-i18n="saveCpdSettings">Save CPD settings</button>
+      </div>
+    </form>
+
+    <h3 class="section-title" data-i18n="settingsLeaveTypesTitle">Leave types</h3>
+    <p class="hint" data-i18n="settingsLeaveTypesHint">Set each type's annual entitlement.</p>
+    <ul id="type-list" class="type-list"></ul>
+    <button id="add-type-btn" class="btn btn-secondary" data-i18n="addTypeBtn">+ Add leave type</button>
+
+    <div class="danger-zone">
+      <h3 data-i18n="dangerZone">Danger zone</h3>
+      <button id="clear-data-btn" class="btn btn-danger" data-i18n="clearDataBtn">Erase all data</button>
+    </div>
+    <p class="footnote" data-i18n="footnoteLocal">All data stays on this device only.</p>
+  </section>
+
+  <!-- LEAVE TYPE FORM (modal body reused) -->
+  <section id="type-form-screen" class="screen" hidden>
+    <form id="type-form">
+      <h2 id="type-form-title" data-i18n="addTypeTitle">Add Leave Type</h2>
+
+      <label for="tf-name-en" data-i18n="fTypeNameEn">Name (English)</label>
+      <input id="tf-name-en" type="text" required />
+
+      <label for="tf-name-zh" data-i18n="fTypeNameZh">Name (中文)</label>
+      <input id="tf-name-zh" type="text" required />
+
+      <label for="tf-entitlement" data-i18n="fEntitlement">Annual entitlement (days)</label>
+      <input id="tf-entitlement" type="number" min="0" step="0.5" value="0" />
+
+      <div class="checkbox-row">
+        <input id="tf-unlimited" type="checkbox" />
+        <label for="tf-unlimited" data-i18n="fUnlimited">Unlimited</label>
+      </div>
+
+      <div class="form-actions">
+        <button type="button" id="type-cancel-btn" class="btn btn-secondary" data-i18n="btnCancel">Cancel</button>
+        <button type="submit" class="btn btn-primary" data-i18n="btnSave">Save</button>
+      </div>
+      <button type="button" id="type-delete-btn" class="btn btn-danger" data-i18n="btnDelete" hidden>Delete</button>
+    </form>
+  </section>
+
+</main>
+
+<nav class="bottom-nav">
+  <button class="nav-btn active" data-screen="dashboard-screen">
+    <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M3 13h8V3H3v10Zm0 8h8v-6H3v6Zm10 0h8V11h-8v10Zm0-18v6h8V3h-8Z"/></svg>
+    <span data-i18n="navDashboard">Home</span>
+  </button>
+  <button class="nav-btn" data-screen="leave-screen">
+    <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M7 2v2H5.5A2.5 2.5 0 0 0 3 6.5v13A2.5 2.5 0 0 0 5.5 22h13a2.5 2.5 0 0 0 2.5-2.5v-13A2.5 2.5 0 0 0 18.5 4H17V2h-2v2H9V2H7Zm12 8v9.5a.5.5 0 0 1-.5.5h-13a.5.5 0 0 1-.5-.5V10h14Z"/></svg>
+    <span data-i18n="navLeave">Leave</span>
+  </button>
+  <button class="fab" id="add-btn" aria-label="Add">
+    <svg viewBox="0 0 24 24" width="26" height="26"><path fill="currentColor" d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2z"/></svg>
+  </button>
+  <button class="nav-btn" data-screen="cpd-screen">
+    <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M12 2 3 6v6c0 5 3.8 9.2 9 10 5.2-.8 9-5 9-10V6l-9-4Zm-1.2 13.7L7.3 12.2l1.4-1.4 2.1 2.1 4.5-4.5 1.4 1.4-5.9 5.9Z"/></svg>
+    <span data-i18n="navCpd">CPD</span>
+  </button>
+  <button class="nav-btn" data-screen="reminders-screen">
+    <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm7-6v-5a7 7 0 0 0-5.5-6.84V3.5a1.5 1.5 0 0 0-3 0v.66A7 7 0 0 0 5 11v5l-2 2v1h18v-1l-2-2Z"/></svg>
+    <span data-i18n="navReminders">Reminders</span>
+  </button>
+</nav>
+
+<div id="record-modal" class="modal" hidden>
+  <div class="modal-card">
+    <button id="modal-close-btn" class="icon-btn modal-close" aria-label="Close">
+      <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.7l-1.42-1.41L9.17 12 2.88 5.71 4.3 4.29l6.29 6.3 6.29-6.3z"/></svg>
+    </button>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<div id="add-choice-modal" class="modal" hidden>
+  <div class="modal-card">
+    <button class="icon-btn modal-close" id="add-choice-close-btn" aria-label="Close">
+      <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.7l-1.42-1.41L9.17 12 2.88 5.71 4.3 4.29l6.29 6.3 6.29-6.3z"/></svg>
+    </button>
+    <h2 data-i18n="addChoiceTitle">What do you want to add?</h2>
+    <div class="choice-actions">
+      <button id="add-choice-leave" class="btn btn-primary" data-i18n="addChoiceLeave">Log leave</button>
+      <button id="add-choice-cpd" class="btn btn-primary" data-i18n="addChoiceCpd">Add CPD record</button>
+      <button id="add-choice-reminder" class="btn btn-primary" data-i18n="addChoiceReminder">Add reminder</button>
+    </div>
+  </div>
+</div>
+
+<script src="i18n.js?v=3"></script>
+<script src="app.js?v=3"></script>
+</body>
+</html>
