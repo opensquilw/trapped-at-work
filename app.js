@@ -22,6 +22,11 @@
     editingCpdId: null,
     pendingFile: null,      // { name, type, dataUrl } staged until the CPD form is saved
     removeAttachment: false,
+    licences: [],
+    planned: [],
+    editingLicenceId: null,
+    editingPlannedId: null,
+    editingRuleId: null,
     cpdFilterCycle: 'all',
     cpdSearch: '',
   };
@@ -68,7 +73,19 @@
     try { state.reminders = JSON.parse(localStorage.getItem('lt_reminders')) || []; } catch { state.reminders = []; }
     try { state.cpdSettings = JSON.parse(localStorage.getItem('lt_cpd_settings')) || null; } catch { state.cpdSettings = null; }
     try { state.cpdRecords = JSON.parse(localStorage.getItem('lt_cpd_records')) || []; } catch { state.cpdRecords = []; }
+    // Migrate the old single {startDate, target} shape to the cycle-rules model.
+    if (state.cpdSettings && !Array.isArray(state.cpdSettings.rules)) {
+      const legacy = state.cpdSettings;
+      state.cpdSettings = legacy.startDate
+        ? { rules: [{ start: legacy.startDate, months: 12, target: Number(legacy.target) || 10 }] }
+        : { rules: [] };
+      saveCpdSettings();
+    }
+    try { state.licences = JSON.parse(localStorage.getItem('lt_licences')) || []; } catch { state.licences = []; }
+    try { state.planned = JSON.parse(localStorage.getItem('lt_planned')) || []; } catch { state.planned = []; }
   }
+  function saveLicences() { localStorage.setItem('lt_licences', JSON.stringify(state.licences)); }
+  function savePlanned() { localStorage.setItem('lt_planned', JSON.stringify(state.planned)); }
   function saveTypes() { localStorage.setItem('lt_types', JSON.stringify(state.types)); }
   function saveEntries() { localStorage.setItem('lt_entries', JSON.stringify(state.entries)); }
   function saveReminders() { localStorage.setItem('lt_reminders', JSON.stringify(state.reminders)); }
@@ -120,23 +137,44 @@
     return records.reduce((sum, r) => sum + (Number(r.points) || 0), 0);
   }
 
-  // Rolling 12-month CPD cycles anchored to the tracking start date's month/day.
-  function buildCycles(startISO, today) {
-    const start = parseISO(startISO);
+  // CPD cycles are generated from an ordered list of rules. Each rule produces
+  // back-to-back cycles of its own length, starting at its start date and
+  // stopping when the next rule takes over. That models a scheme whose cycle
+  // length changes partway — e.g. a 3-year cycle to Jun 2028, annual after that
+  // — which a single fixed interval cannot express. Each cycle carries the
+  // target from the rule that produced it.
+  function buildCyclesFromRules(rules, today) {
+    const sorted = rules.slice()
+      .filter(r => r && r.start)
+      .sort((a, b) => a.start.localeCompare(b.start));
     const cycles = [];
-    let cs = new Date(start);
-    let guard = 0;
-    while (cs <= today && guard < 200) {
-      const ce = addYears(cs, 1);
-      ce.setDate(ce.getDate() - 1);
-      cycles.push({ start: new Date(cs), end: ce, index: cycles.length });
-      cs = addYears(cs, 1);
-      guard++;
-    }
-    if (!cycles.length) {
-      const ce0 = addYears(start, 1);
-      ce0.setDate(ce0.getDate() - 1);
-      cycles.push({ start, end: ce0, index: 0 });
+    if (!sorted.length) return cycles;
+
+    for (let i = 0; i < sorted.length; i++) {
+      const rule = sorted[i];
+      const months = Math.max(1, Number(rule.months) || 12);
+      const target = Number(rule.target) || 0;
+      const nextStart = sorted[i + 1] ? parseISO(sorted[i + 1].start) : null;
+      let cs = parseISO(rule.start);
+      let guard = 0;
+
+      while (guard++ < 400) {
+        let ce = parseISO(addMonths(toISO(cs), months));
+        ce.setDate(ce.getDate() - 1);
+        // a later rule cuts the current cycle short on the day it begins
+        if (nextStart && ce >= nextStart) {
+          ce = new Date(nextStart);
+          ce.setDate(ce.getDate() - 1);
+        }
+        if (ce < cs) break;
+        cycles.push({ start: new Date(cs), end: ce, index: cycles.length, target });
+
+        const nx = new Date(ce);
+        nx.setDate(nx.getDate() + 1);
+        cs = nx;
+        if (nextStart && cs >= nextStart) break;
+        if (!nextStart && cs > today) break; // last cycle now contains today
+      }
     }
     return cycles;
   }
@@ -147,10 +185,19 @@
     if (d > cycles[cycles.length - 1].end) return cycles[cycles.length - 1];
     return null; // dated before tracking started
   }
-  // Records dated before the tracking start date are kept but excluded from totals.
+  function cpdRules() {
+    return (state.cpdSettings && Array.isArray(state.cpdSettings.rules)) ? state.cpdSettings.rules : [];
+  }
+  function earliestRuleStart() {
+    const rules = cpdRules();
+    if (!rules.length) return null;
+    return rules.slice().sort((a, b) => a.start.localeCompare(b.start))[0].start;
+  }
+  // Records dated before tracking begins are kept but excluded from totals.
   function trackedCpdRecords() {
-    if (!state.cpdSettings) return [];
-    const start = parseISO(state.cpdSettings.startDate);
+    const first = earliestRuleStart();
+    if (!first) return [];
+    const start = parseISO(first);
     return state.cpdRecords.filter(r => parseISO(r.date) >= start);
   }
 
@@ -196,7 +243,7 @@
       p.textContent = t('dashCpdSetup');
       cpdEl.appendChild(p);
     } else {
-      const target = Number(state.cpdSettings.target) || 0;
+      const target = Number(info.current.target) || 0;
       const pts = cpdPointsInCycle(info.current);
       const card = document.createElement('div');
       card.className = 'leave-card';
@@ -210,6 +257,19 @@
       `;
       cpdEl.appendChild(card);
     }
+
+    // licences expiring within 90 days, plus courses in the next 30 — the things
+    // that actually need acting on soon
+    const expiring = [
+      ...state.licences.filter(l => daysUntil(l.expiry) <= 90).map(l => ({ kind: 'licence', obj: l, date: l.expiry })),
+      ...state.planned.filter(p => { const d = daysUntil(p.date); return d >= 0 && d <= 30; }).map(p => ({ kind: 'planned', obj: p, date: p.date })),
+    ].sort((a, b) => a.date.localeCompare(b.date)).slice(0, 5);
+    const expEl = $('#dash-expiring-list');
+    expEl.innerHTML = '';
+    $('#dash-expiring-head').hidden = expiring.length === 0;
+    expiring.forEach(e => expEl.appendChild(
+      e.kind === 'licence' ? buildLicenceItem(e.obj) : buildPlannedItem(e.obj)
+    ));
 
     // upcoming reminders (not done, sorted by due date), top 5
     const upcoming = state.reminders
@@ -466,10 +526,12 @@
   const RING_C = 2 * Math.PI * 60;
 
   function cpdCycleInfo() {
-    if (!state.cpdSettings) return null;
+    const rules = cpdRules();
+    if (!rules.length) return null;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const cycles = buildCycles(state.cpdSettings.startDate, today);
+    const cycles = buildCyclesFromRules(rules, today);
+    if (!cycles.length) return null;
     const current = cycleForDate(cycles, today) || cycles[cycles.length - 1];
     return { cycles, current, today };
   }
@@ -484,7 +546,9 @@
   function renderCpd() {
     const info = cpdCycleInfo();
     const ring = $('#ring-progress');
-    const target = state.cpdSettings ? Number(state.cpdSettings.target) || 0 : 0;
+    // Target comes from the cycle itself, so a scheme that changes its
+    // requirement mid-history still scores each past cycle against its own rule.
+    const target = info ? Number(info.current.target) || 0 : 0;
 
     if (!info) {
       $('#ring-points').textContent = '0';
@@ -515,19 +579,22 @@
         : (LANG === 'zh' ? '本週期已達標 🎉' : 'Target met for this cycle 🎉');
 
       $('#cpd-stat-total').textContent = roundPts(pointsSum(trackedCpdRecords()));
-      $('#cpd-stat-cycles').textContent = cycles.length;
+      // Only count cycles that have actually begun — a future rule can generate
+      // a cycle beyond today, which shouldn't inflate the count or the history.
+      $('#cpd-stat-cycles').textContent = cycles.filter(c => c.start <= today).length;
       $('#cpd-stat-days').textContent = daysLeft;
 
       const hist = $('#cpd-cycle-history');
       hist.innerHTML = '';
-      cycles.slice(0, -1).reverse().forEach(c => {
+      cycles.filter(c => c.end < today).reverse().forEach(c => {
         const pts = cpdPointsInCycle(c);
-        const met = target > 0 && pts >= target;
+        const cTarget = Number(c.target) || 0;
+        const met = cTarget > 0 && pts >= cTarget;
         const li = document.createElement('li');
         li.className = 'cycle-item';
         li.innerHTML = `
           <span class="cy-range">${fmtMonthYear(c.start)} – ${fmtMonthYear(c.end)}</span>
-          <span class="cy-pts">${pts} / ${roundPts(target)}</span>
+          <span class="cy-pts">${pts} / ${roundPts(cTarget)}</span>
           <span class="badge ${met ? 'met' : 'short'}">${met ? t('badgeMet') : t('badgeShort')}</span>
         `;
         hist.appendChild(li);
@@ -797,16 +864,423 @@
     renderAll();
   });
 
-  // ---------- CPD settings ----------
-  $('#cpd-settings-form').addEventListener('submit', ev => {
+  // ---------- CPD cycle rules ----------
+  const MONTHS_LABEL = { 6: 'len6m', 12: 'len1y', 24: 'len2y', 36: 'len3y', 48: 'len4y', 60: 'len5y' };
+
+  function renderCycleRules() {
+    const rules = cpdRules().slice().sort((a, b) => a.start.localeCompare(b.start));
+    const el = $('#cycle-rule-list');
+    el.innerHTML = '';
+    rules.forEach(r => {
+      const li = document.createElement('li');
+      li.className = 'type-item';
+      const len = t(MONTHS_LABEL[Number(r.months)] || 'len1y');
+      li.innerHTML = `
+        <span class="ti-name">${t('ruleFromLabel')} ${formatDate(r.start)}</span>
+        <span class="ti-meta">${len} · ${roundPts(Number(r.target) || 0)} ${t('cpdPtsLabel')}</span>
+      `;
+      li.addEventListener('click', () => openCycleRuleForm(r.id));
+      el.appendChild(li);
+    });
+  }
+
+  function openCycleRuleForm(id) {
+    state.editingRuleId = id || null;
+    if (id) {
+      const r = cpdRules().find(x => x.id === id);
+      $('#cycle-rule-form-title').textContent = t('cycleRuleFormEdit');
+      $('#cr-start').value = r.start;
+      $('#cr-months').value = String(r.months || 12);
+      $('#cr-target').value = r.target;
+      $('#cycle-rule-delete-btn').hidden = false;
+    } else {
+      $('#cycle-rule-form-title').textContent = t('cycleRuleFormAdd');
+      $('#cycle-rule-form').reset();
+      $('#cr-start').value = todayStr();
+      $('#cr-months').value = '12';
+      $('#cr-target').value = 10;
+      $('#cycle-rule-delete-btn').hidden = true;
+    }
+    showScreen('cycle-rule-form-screen');
+  }
+
+  $('#add-cycle-rule-btn').addEventListener('click', () => openCycleRuleForm(null));
+
+  $('#cycle-rule-form').addEventListener('submit', ev => {
     ev.preventDefault();
-    state.cpdSettings = {
-      startDate: $('#cs-start').value,
-      target: Number($('#cs-target').value) || 10,
+    const data = {
+      start: $('#cr-start').value,
+      months: Number($('#cr-months').value) || 12,
+      target: Number($('#cr-target').value) || 0,
     };
+    if (!state.cpdSettings || !Array.isArray(state.cpdSettings.rules)) {
+      state.cpdSettings = { rules: [] };
+    }
+    if (state.editingRuleId) {
+      Object.assign(state.cpdSettings.rules.find(x => x.id === state.editingRuleId), data);
+    } else {
+      state.cpdSettings.rules.push({ id: uid(), ...data });
+    }
     saveCpdSettings();
+    showScreen('settings-screen');
     renderAll();
+  });
+  $('#cycle-rule-cancel-btn').addEventListener('click', () => { showScreen('settings-screen'); renderAll(); });
+  $('#cycle-rule-delete-btn').addEventListener('click', () => {
+    if (!confirm(t('cycleRuleDeleteConfirm'))) return;
+    state.cpdSettings.rules = state.cpdSettings.rules.filter(x => x.id !== state.editingRuleId);
+    saveCpdSettings();
+    showScreen('settings-screen');
+    renderAll();
+  });
+
+  // ---------- calendar export (.ics) ----------
+  // A web app can't schedule notifications that fire while it's closed — there is
+  // no such browser API, and web push would need a server holding the user's data.
+  // So reminders are handed to the phone's own Calendar, which alerts reliably.
+  function icsEscape(s) {
+    return String(s == null ? '' : s)
+      .replace(/\\/g, '\\\\')
+      .replace(/;/g, '\\;')
+      .replace(/,/g, '\\,')
+      .replace(/\r?\n/g, '\\n');
+  }
+  // RFC 5545 says fold lines longer than 75 octets; continuation lines start with a space.
+  function icsFold(line) {
+    if (line.length <= 73) return line;
+    const out = [];
+    let rest = line;
+    out.push(rest.slice(0, 73));
+    rest = rest.slice(73);
+    while (rest.length > 72) {
+      out.push(' ' + rest.slice(0, 72));
+      rest = rest.slice(72);
+    }
+    if (rest.length) out.push(' ' + rest);
+    return out.join('\r\n');
+  }
+  function icsStamp(d) {
+    return d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+  }
+  function icsDateOnly(iso) { return iso.replace(/-/g, ''); }
+
+  function addMonths(iso, months) {
+    const d = parseISO(iso);
+    const day = d.getDate();
+    d.setDate(1);
+    d.setMonth(d.getMonth() + months);
+    // clamp so e.g. 31 Aug + 6 months lands on 28/29 Feb, not 3 March
+    const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    d.setDate(Math.min(day, lastDay));
+    return toISO(d);
+  }
+
+  function daysUntil(iso) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return Math.round((parseISO(iso) - today) / 86400000);
+  }
+
+  function buildEvent({ uid, date, time, summary, description, url, rruleMonths, alarms }) {
+    const lines = [];
+    lines.push('BEGIN:VEVENT');
+    lines.push(`UID:${uid}@trapped-at-work`);
+    lines.push(`DTSTAMP:${icsStamp(new Date())}`);
+    if (time) {
+      const t = time.replace(':', '') + '00';
+      lines.push(`DTSTART:${icsDateOnly(date)}T${t}`);
+      // Give timed events an explicit 1-hour end; a VEVENT with no DTEND is
+      // zero-length and some calendar clients render or import it oddly.
+      const [hh, mm] = time.split(':').map(Number);
+      const endD = parseISO(date);
+      endD.setHours(hh + 1, mm, 0, 0);
+      const pad = n => String(n).padStart(2, '0');
+      lines.push(`DTEND:${icsDateOnly(toISO(endD))}T${pad(endD.getHours())}${pad(endD.getMinutes())}00`);
+    } else {
+      lines.push(`DTSTART;VALUE=DATE:${icsDateOnly(date)}`);
+      const next = new Date(parseISO(date));
+      next.setDate(next.getDate() + 1);
+      lines.push(`DTEND;VALUE=DATE:${icsDateOnly(toISO(next))}`);
+    }
+    if (rruleMonths) lines.push(`RRULE:FREQ=MONTHLY;INTERVAL=${rruleMonths}`);
+    lines.push(`SUMMARY:${icsEscape(summary)}`);
+    if (description) lines.push(`DESCRIPTION:${icsEscape(description)}`);
+    if (url) lines.push(`URL:${icsEscape(url)}`);
+    (alarms || []).forEach(trigger => {
+      lines.push('BEGIN:VALARM');
+      lines.push('ACTION:DISPLAY');
+      lines.push(`TRIGGER:${trigger}`);
+      lines.push(`DESCRIPTION:${icsEscape(summary)}`);
+      lines.push('END:VALARM');
+    });
+    lines.push('END:VEVENT');
+    return lines;
+  }
+
+  function licenceEvent(l) {
+    const parts = [l.authority, l.notes].filter(Boolean);
+    return buildEvent({
+      uid: l.id,
+      date: l.expiry,
+      summary: `${l.name} — renewal due`,
+      description: parts.join('\n'),
+      rruleMonths: Number(l.intervalMonths) || 12,
+      alarms: ['-P60D', '-P14D', '-P1D'],
+    });
+  }
+
+  function plannedEvent(p) {
+    const parts = [];
+    if (p.organizer) parts.push(p.organizer);
+    if (p.points) parts.push(`Expected ${p.points} CPD points`);
+    if (p.comments) parts.push(p.comments);
+    if (p.link) parts.push(p.link);
+    return buildEvent({
+      uid: p.id,
+      date: p.date,
+      time: p.time,
+      summary: p.title,
+      description: parts.join('\n'),
+      url: p.link,
+      alarms: ['-P7D', '-P1D'],
+    });
+  }
+
+  function downloadIcs(eventBlocks, filename) {
+    const lines = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//Trapped At Work//CPD//EN',
+      'CALSCALE:GREGORIAN',
+      ...eventBlocks,
+      'END:VCALENDAR',
+    ];
+    const body = lines.map(icsFold).join('\r\n') + '\r\n';
+    const blob = new Blob([body], { type: 'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+
+  $('#cal-export-all').addEventListener('click', () => {
+    const blocks = [];
+    state.licences.forEach(l => blocks.push(...licenceEvent(l)));
+    state.planned.forEach(p => blocks.push(...plannedEvent(p)));
+    if (!blocks.length) { alert(t('calNothing')); return; }
+    downloadIcs(blocks, 'trapped-at-work-reminders.ics');
+  });
+
+  // ---------- licences ----------
+  function licenceStatus(l) {
+    const d = daysUntil(l.expiry);
+    if (d < 0) return { cls: 'warn', label: t('expiredBadge'), days: d };
+    if (d <= 60) return { cls: 'soon', label: t('expiringBadge'), days: d };
+    return { cls: '', label: '', days: d };
+  }
+
+  function buildLicenceItem(l) {
+    const st = licenceStatus(l);
+    const li = document.createElement('li');
+    li.className = 'record-item';
+    const tail = st.label
+      ? `<span class="badge ${st.cls}">${st.label}</span>`
+      : (st.days >= 0 ? `· ${st.days} ${t('daysLeftSuffix')}` : '');
+    li.innerHTML = `
+      <span class="record-pts">${st.days >= 0 ? st.days : '!'}</span>
+      <span class="record-main">
+        <span class="record-title">${escapeHtml(l.name)}</span>
+        <span class="record-meta">${formatDate(l.expiry)}${l.authority ? ' · ' + escapeHtml(l.authority) : ''} ${tail}</span>
+      </span>
+    `;
+    li.addEventListener('click', () => openLicenceForm(l.id));
+    return li;
+  }
+
+  function renderLicences() {
+    const list = state.licences.slice().sort((a, b) => a.expiry.localeCompare(b.expiry));
+    const el = $('#licences-list');
+    el.innerHTML = '';
+    $('#licences-empty').hidden = list.length > 0;
+    list.forEach(l => el.appendChild(buildLicenceItem(l)));
+  }
+
+  function openLicenceForm(id) {
+    state.editingLicenceId = id || null;
+    if (id) {
+      const l = state.licences.find(x => x.id === id);
+      $('#licence-form-title').textContent = t('licenceFormTitleEdit');
+      $('#lc-name').value = l.name;
+      $('#lc-authority').value = l.authority || '';
+      $('#lc-expiry').value = l.expiry;
+      $('#lc-interval').value = String(l.intervalMonths || 12);
+      $('#lc-notes').value = l.notes || '';
+      ['#licence-delete-btn', '#licence-renewed-btn', '#licence-cal-btn'].forEach(s => { $(s).hidden = false; });
+    } else {
+      $('#licence-form-title').textContent = t('licenceFormTitleAdd');
+      $('#licence-form').reset();
+      $('#lc-interval').value = '24';
+      ['#licence-delete-btn', '#licence-renewed-btn', '#licence-cal-btn'].forEach(s => { $(s).hidden = true; });
+    }
+    showScreen('licence-form-screen');
+  }
+
+  $('#licence-form').addEventListener('submit', ev => {
+    ev.preventDefault();
+    const data = {
+      name: $('#lc-name').value.trim(),
+      authority: $('#lc-authority').value.trim(),
+      expiry: $('#lc-expiry').value,
+      intervalMonths: Number($('#lc-interval').value) || 12,
+      notes: $('#lc-notes').value.trim(),
+    };
+    if (state.editingLicenceId) {
+      Object.assign(state.licences.find(x => x.id === state.editingLicenceId), data);
+    } else {
+      state.licences.push({ id: uid(), ...data });
+    }
+    saveLicences();
+    showScreen('reminders-screen');
+    renderAll();
+  });
+  $('#licence-cancel-btn').addEventListener('click', () => { showScreen('reminders-screen'); renderAll(); });
+  $('#licence-delete-btn').addEventListener('click', () => {
+    state.licences = state.licences.filter(x => x.id !== state.editingLicenceId);
+    saveLicences();
+    showScreen('reminders-screen');
+    renderAll();
+  });
+  $('#licence-renewed-btn').addEventListener('click', () => {
+    if (!confirm(t('licenceRenewedConfirm'))) return;
+    const l = state.licences.find(x => x.id === state.editingLicenceId);
+    l.expiry = addMonths(l.expiry, Number(l.intervalMonths) || 12);
+    saveLicences();
+    $('#lc-expiry').value = l.expiry;
+    renderAll();
+  });
+  $('#licence-cal-btn').addEventListener('click', () => {
+    const l = state.licences.find(x => x.id === state.editingLicenceId);
+    if (l) downloadIcs(licenceEvent(l), `${l.name.replace(/[^\w\-]+/g, '-') || 'licence'}.ics`);
+  });
+
+  // ---------- planned courses ----------
+  function buildPlannedItem(p) {
+    const d = daysUntil(p.date);
+    const li = document.createElement('li');
+    li.className = 'record-item';
+    let badge = '';
+    if (d < 0) badge = `<span class="badge warn">${t('overdueBadge')}</span>`;
+    else if (d === 0) badge = `<span class="badge info">${t('todayBadge')}</span>`;
+    else if (d <= 7) badge = `<span class="badge soon">${d} ${t('daysLeftSuffix')}</span>`;
+    const linkIcon = p.link
+      ? '<svg class="record-link" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M3.9 12a5.1 5.1 0 0 1 5.1-5.1h3V5H9a7 7 0 0 0 0 14h3v-1.9H9A5.1 5.1 0 0 1 3.9 12ZM8 13h8v-2H8v2Zm7-8h-3v1.9h3a5.1 5.1 0 0 1 0 10.2h-3V19h3a7 7 0 0 0 0-14Z"/></svg>'
+      : '';
+    li.innerHTML = `
+      <span class="record-pts">${p.points ? p.points : '—'}</span>
+      <span class="record-main">
+        <span class="record-title">${escapeHtml(p.title)}</span>
+        <span class="record-meta">${formatDate(p.date)}${p.time ? ' ' + p.time : ''}${p.organizer ? ' · ' + escapeHtml(p.organizer) : ''} ${badge}</span>
+      </span>
+      ${linkIcon}
+    `;
+    li.addEventListener('click', () => openPlannedForm(p.id));
+    return li;
+  }
+
+  function renderPlanned() {
+    const list = state.planned.slice().sort((a, b) => a.date.localeCompare(b.date));
+    const el = $('#planned-list');
+    el.innerHTML = '';
+    $('#planned-empty').hidden = list.length > 0;
+    list.forEach(p => el.appendChild(buildPlannedItem(p)));
+  }
+
+  function openPlannedForm(id) {
+    state.editingPlannedId = id || null;
+    const extras = ['#planned-delete-btn', '#planned-cal-btn', '#planned-attended-btn', '#planned-attended-hint'];
+    if (id) {
+      const p = state.planned.find(x => x.id === id);
+      $('#planned-form-title').textContent = t('plannedFormTitleEdit');
+      $('#pl-title').value = p.title;
+      $('#pl-date').value = p.date;
+      $('#pl-time').value = p.time || '';
+      $('#pl-link').value = p.link || '';
+      $('#pl-organizer').value = p.organizer || '';
+      $('#pl-points').value = p.points || '';
+      $('#pl-comments').value = p.comments || '';
+      extras.forEach(s => { $(s).hidden = false; });
+      $('#planned-link-btn').hidden = !p.link;
+    } else {
+      $('#planned-form-title').textContent = t('plannedFormTitleAdd');
+      $('#planned-form').reset();
+      $('#pl-date').value = todayStr();
+      extras.forEach(s => { $(s).hidden = true; });
+      $('#planned-link-btn').hidden = true;
+    }
+    showScreen('planned-form-screen');
+  }
+
+  $('#planned-form').addEventListener('submit', ev => {
+    ev.preventDefault();
+    const data = {
+      title: $('#pl-title').value.trim(),
+      date: $('#pl-date').value,
+      time: $('#pl-time').value,
+      link: $('#pl-link').value.trim(),
+      organizer: $('#pl-organizer').value.trim(),
+      points: Number($('#pl-points').value) || 0,
+      comments: $('#pl-comments').value.trim(),
+    };
+    if (state.editingPlannedId) {
+      Object.assign(state.planned.find(x => x.id === state.editingPlannedId), data);
+    } else {
+      state.planned.push({ id: uid(), ...data });
+    }
+    savePlanned();
+    showScreen('reminders-screen');
+    renderAll();
+  });
+  $('#planned-cancel-btn').addEventListener('click', () => { showScreen('reminders-screen'); renderAll(); });
+  $('#planned-delete-btn').addEventListener('click', () => {
+    state.planned = state.planned.filter(x => x.id !== state.editingPlannedId);
+    savePlanned();
+    showScreen('reminders-screen');
+    renderAll();
+  });
+  $('#planned-cal-btn').addEventListener('click', () => {
+    const p = state.planned.find(x => x.id === state.editingPlannedId);
+    if (p) downloadIcs(plannedEvent(p), `${p.title.replace(/[^\w\-]+/g, '-') || 'course'}.ics`);
+  });
+  $('#planned-link-btn').addEventListener('click', () => {
+    const p = state.planned.find(x => x.id === state.editingPlannedId);
+    if (p && p.link) window.open(p.link, '_blank', 'noopener');
+  });
+  // Turns a planned course into a real CPD record once it's been attended.
+  $('#planned-attended-btn').addEventListener('click', () => {
+    const p = state.planned.find(x => x.id === state.editingPlannedId);
+    if (!p) return;
+    const notes = [p.comments, p.link].filter(Boolean).join('\n');
+    state.cpdRecords.push({
+      id: uid(),
+      createdAt: Date.now(),
+      hasAttachment: false,
+      title: p.title,
+      date: p.date,
+      points: Number(p.points) || 0,
+      category: 'other',
+      location: p.organizer || '',
+      notes,
+    });
+    state.planned = state.planned.filter(x => x.id !== p.id);
+    saveCpdRecords();
+    savePlanned();
     showScreen('cpd-screen');
+    renderAll();
   });
 
   // ---------- import ----------
@@ -902,13 +1376,7 @@
   // ---------- settings ----------
   function renderSettings() {
     $$('.seg-btn[data-lang]').forEach(b => b.classList.toggle('active', b.dataset.lang === LANG));
-    if (state.cpdSettings) {
-      $('#cs-start').value = state.cpdSettings.startDate;
-      $('#cs-target').value = state.cpdSettings.target;
-    } else if (!$('#cs-start').value) {
-      $('#cs-start').value = todayStr();
-      $('#cs-target').value = 10;
-    }
+    renderCycleRules();
     const listEl = $('#type-list');
     listEl.innerHTML = '';
     state.types.forEach(type => {
@@ -934,8 +1402,8 @@
 
   $('#clear-data-btn').addEventListener('click', () => {
     if (!confirm(t('clearDataConfirm'))) return;
-    ['lt_types', 'lt_entries', 'lt_reminders', 'lt_cpd_settings', 'lt_cpd_records']
-      .forEach(k => localStorage.removeItem(k));
+    ['lt_types', 'lt_entries', 'lt_reminders', 'lt_cpd_settings', 'lt_cpd_records',
+     'lt_licences', 'lt_planned'].forEach(k => localStorage.removeItem(k));
     idbClear().catch(() => {});
     load();
     showScreen('dashboard-screen');
@@ -1002,7 +1470,7 @@
   $('#add-btn').addEventListener('click', () => {
     const current = $$('.screen').find(s => !s.hidden);
     if (current && current.id === 'leave-screen') { openLeaveForm(null); return; }
-    if (current && current.id === 'reminders-screen') { openReminderForm(null); return; }
+    // The Reminders tab now holds three kinds of thing, so ask which to add.
     if (current && current.id === 'cpd-screen') { openCpdForm(null); return; }
     $('#add-choice-modal').hidden = false;
   });
@@ -1010,6 +1478,8 @@
   $('#add-choice-modal').addEventListener('click', (ev) => { if (ev.target.id === 'add-choice-modal') $('#add-choice-modal').hidden = true; });
   $('#add-choice-leave').addEventListener('click', () => { $('#add-choice-modal').hidden = true; openLeaveForm(null); });
   $('#add-choice-cpd').addEventListener('click', () => { $('#add-choice-modal').hidden = true; openCpdForm(null); });
+  $('#add-choice-planned').addEventListener('click', () => { $('#add-choice-modal').hidden = true; openPlannedForm(null); });
+  $('#add-choice-licence').addEventListener('click', () => { $('#add-choice-modal').hidden = true; openLicenceForm(null); });
   $('#add-choice-reminder').addEventListener('click', () => { $('#add-choice-modal').hidden = true; openReminderForm(null); });
 
   // ---------- render all ----------
@@ -1018,6 +1488,8 @@
     renderDashboard();
     renderLeaveScreen();
     renderCpd();
+    renderLicences();
+    renderPlanned();
     renderReminders();
     renderSettings();
   }
@@ -1025,7 +1497,7 @@
   // ---------- init ----------
   // Shown in Settings so it's possible to tell at a glance whether an installed
   // home-screen app is running the current build or a stale cached one.
-  const APP_BUILD = 'build 5 · 2026-09-06';
+  const APP_BUILD = 'build 6 · 2026-09-06';
   $('#build-tag').textContent = APP_BUILD;
 
   load();

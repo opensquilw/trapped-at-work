@@ -12,7 +12,7 @@
 <link rel="manifest" href="manifest.json" />
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
 <link rel="icon" href="icons/icon-192.png" />
-<link rel="stylesheet" href="style.css?v=5" />
+<link rel="stylesheet" href="style.css?v=6" />
 </head>
 <body>
 
@@ -36,6 +36,12 @@
       <button class="link-btn" data-goto="cpd-screen" data-i18n="dashSeeAll">See all</button>
     </div>
     <div id="dash-cpd-card"></div>
+
+    <div class="section-head" id="dash-expiring-head" hidden>
+      <h2 class="section-title" data-i18n="dashExpiringTitle">Expiring soon</h2>
+      <button class="link-btn" data-goto="reminders-screen" data-i18n="dashSeeAll">See all</button>
+    </div>
+    <ul id="dash-expiring-list" class="record-list"></ul>
 
     <div class="section-head">
       <h2 class="section-title" data-i18n="dashRemindersTitle">Upcoming reminders</h2>
@@ -191,6 +197,21 @@
 
   <!-- REMINDERS -->
   <section id="reminders-screen" class="screen" hidden>
+    <div class="cal-banner">
+      <p class="cal-banner-text" data-i18n="calendarHint">Add these to your phone's Calendar for real alerts.</p>
+      <button id="cal-export-all" class="btn btn-primary" data-i18n="exportAllCalBtn">Add all to calendar</button>
+      <p class="cal-banner-note" data-i18n="alarmNote">Alerts are set ahead of each date.</p>
+    </div>
+
+    <h2 class="section-title" data-i18n="licencesTitle">Licences &amp; renewals</h2>
+    <ul id="licences-list" class="record-list"></ul>
+    <p id="licences-empty" class="empty-msg" data-i18n="licencesEmpty" hidden>No licences tracked yet.</p>
+
+    <h2 class="section-title" data-i18n="plannedTitle">Upcoming courses</h2>
+    <ul id="planned-list" class="record-list"></ul>
+    <p id="planned-empty" class="empty-msg" data-i18n="plannedEmpty" hidden>Nothing planned yet.</p>
+
+    <h2 class="section-title" data-i18n="remindersTasksTitle">Tasks</h2>
     <ul id="reminders-list" class="record-list"></ul>
     <p id="reminders-empty" class="empty-msg" data-i18n="remindersEmpty" hidden>No reminders yet.</p>
 
@@ -198,6 +219,114 @@
       <h2 class="section-title" data-i18n="remindersDoneTitle">Completed</h2>
       <ul id="reminders-done-list" class="record-list"></ul>
     </div>
+  </section>
+
+  <!-- CPD CYCLE RULE FORM -->
+  <section id="cycle-rule-form-screen" class="screen" hidden>
+    <form id="cycle-rule-form">
+      <h2 id="cycle-rule-form-title" data-i18n="cycleRuleFormAdd">Add Cycle Rule</h2>
+
+      <label for="cr-start" data-i18n="fRuleStart">Cycle start date</label>
+      <input id="cr-start" type="date" required />
+      <p class="hint" data-i18n="ruleStartHint">The first day of the cycle, e.g. 1 July 2025.</p>
+
+      <label for="cr-months" data-i18n="fRuleMonths">Cycle length</label>
+      <select id="cr-months">
+        <option value="6" data-i18n="len6m">6 months</option>
+        <option value="12" data-i18n="len1y">1 year</option>
+        <option value="24" data-i18n="len2y">2 years</option>
+        <option value="36" data-i18n="len3y">3 years</option>
+        <option value="48" data-i18n="len4y">4 years</option>
+        <option value="60" data-i18n="len5y">5 years</option>
+      </select>
+
+      <label for="cr-target" data-i18n="fRuleTarget">Points required in this cycle</label>
+      <input id="cr-target" type="number" min="0" step="0.5" required value="10" />
+
+      <div class="form-actions">
+        <button type="button" id="cycle-rule-cancel-btn" class="btn btn-secondary" data-i18n="btnCancel">Cancel</button>
+        <button type="submit" class="btn btn-primary" data-i18n="btnSave">Save</button>
+      </div>
+      <button type="button" id="cycle-rule-delete-btn" class="btn btn-danger" data-i18n="btnDelete" hidden>Delete</button>
+    </form>
+  </section>
+
+  <!-- LICENCE FORM -->
+  <section id="licence-form-screen" class="screen" hidden>
+    <form id="licence-form">
+      <h2 id="licence-form-title" data-i18n="licenceFormTitleAdd">Add Licence</h2>
+
+      <label for="lc-name" data-i18n="fLicenceName">Licence / certificate name</label>
+      <input id="lc-name" type="text" required />
+
+      <label for="lc-authority" data-i18n="fLicenceAuthority">Issuing body</label>
+      <input id="lc-authority" type="text" />
+
+      <label for="lc-expiry" data-i18n="fLicenceExpiry">Next expiry date</label>
+      <input id="lc-expiry" type="date" required />
+
+      <label for="lc-interval" data-i18n="fLicenceInterval">Renew every</label>
+      <select id="lc-interval">
+        <option value="6" data-i18n="intervalMonths6">Every 6 months</option>
+        <option value="12" data-i18n="intervalMonths12">Every year</option>
+        <option value="24" data-i18n="intervalMonths24">Every 2 years</option>
+        <option value="36" data-i18n="intervalMonths36">Every 3 years</option>
+      </select>
+
+      <label for="lc-notes" data-i18n="fNote">Note (optional)</label>
+      <textarea id="lc-notes" rows="2"></textarea>
+
+      <div class="form-actions">
+        <button type="button" id="licence-cancel-btn" class="btn btn-secondary" data-i18n="btnCancel">Cancel</button>
+        <button type="submit" class="btn btn-primary" data-i18n="btnSave">Save</button>
+      </div>
+      <button type="button" id="licence-cal-btn" class="btn btn-secondary" data-i18n="addToCalendarBtn" hidden>Add to calendar</button>
+      <button type="button" id="licence-renewed-btn" class="btn btn-secondary" data-i18n="licenceRenewedBtn" hidden>Mark renewed</button>
+      <button type="button" id="licence-delete-btn" class="btn btn-danger" data-i18n="btnDelete" hidden>Delete</button>
+    </form>
+  </section>
+
+  <!-- PLANNED COURSE FORM -->
+  <section id="planned-form-screen" class="screen" hidden>
+    <form id="planned-form">
+      <h2 id="planned-form-title" data-i18n="plannedFormTitleAdd">Add Upcoming Course</h2>
+
+      <label for="pl-title" data-i18n="fPlannedTitle">Course / event name</label>
+      <input id="pl-title" type="text" required />
+
+      <div class="field-row">
+        <div class="field-col">
+          <label for="pl-date" data-i18n="fPlannedDate">Date</label>
+          <input id="pl-date" type="date" required />
+        </div>
+        <div class="field-col">
+          <label for="pl-time" data-i18n="fPlannedTime">Start time</label>
+          <input id="pl-time" type="time" />
+        </div>
+      </div>
+
+      <label for="pl-link" data-i18n="fPlannedLink">Link</label>
+      <input id="pl-link" type="url" inputmode="url" placeholder="https://" />
+
+      <label for="pl-organizer" data-i18n="fPlannedOrganizer">Organizer</label>
+      <input id="pl-organizer" type="text" />
+
+      <label for="pl-points" data-i18n="fPlannedPoints">Expected points (optional)</label>
+      <input id="pl-points" type="number" min="0" step="0.5" />
+
+      <label for="pl-comments" data-i18n="fPlannedComments">Comments</label>
+      <textarea id="pl-comments" rows="3"></textarea>
+
+      <div class="form-actions">
+        <button type="button" id="planned-cancel-btn" class="btn btn-secondary" data-i18n="btnCancel">Cancel</button>
+        <button type="submit" class="btn btn-primary" data-i18n="btnSave">Save</button>
+      </div>
+      <button type="button" id="planned-cal-btn" class="btn btn-secondary" data-i18n="addToCalendarBtn" hidden>Add to calendar</button>
+      <button type="button" id="planned-link-btn" class="btn btn-secondary" data-i18n="openLinkBtn" hidden>Open link</button>
+      <button type="button" id="planned-attended-btn" class="btn btn-secondary" data-i18n="markAttendedBtn" hidden>Mark attended</button>
+      <p class="hint" id="planned-attended-hint" data-i18n="markAttendedHint" hidden></p>
+      <button type="button" id="planned-delete-btn" class="btn btn-danger" data-i18n="btnDelete" hidden>Delete</button>
+    </form>
   </section>
 
   <!-- REMINDER FORM -->
@@ -232,19 +361,10 @@
       <button id="lang-zh-btn" class="seg-btn" data-lang="zh">繁中</button>
     </div>
 
-    <h3 class="section-title" data-i18n="settingsCpdTitle">CPD tracking</h3>
-    <form id="cpd-settings-form">
-      <label for="cs-start" data-i18n="fCpdStart">CPD tracking start date</label>
-      <input id="cs-start" type="date" required />
-      <p class="hint" data-i18n="cpdStartHint">Your CPD year renews every 12 months from this date.</p>
-
-      <label for="cs-target" data-i18n="fCpdTarget">Annual point target</label>
-      <input id="cs-target" type="number" min="1" step="0.5" required value="10" />
-
-      <div class="form-actions">
-        <button type="submit" class="btn btn-primary" data-i18n="saveCpdSettings">Save CPD settings</button>
-      </div>
-    </form>
+    <h3 class="section-title" data-i18n="settingsCpdTitle">CPD cycles</h3>
+    <p class="hint" data-i18n="cyclesHint">Each rule runs from its start date until the next rule begins.</p>
+    <ul id="cycle-rule-list" class="type-list"></ul>
+    <button id="add-cycle-rule-btn" class="btn btn-secondary" data-i18n="addCycleRuleBtn">+ Add cycle rule</button>
 
     <h3 class="section-title" data-i18n="settingsImportTitle">Import CPD records</h3>
     <p class="hint" data-i18n="importHint">Load records from a .json file, or paste the data below.</p>
@@ -347,12 +467,14 @@
     <div class="choice-actions">
       <button id="add-choice-leave" class="btn btn-primary" data-i18n="addChoiceLeave">Log leave</button>
       <button id="add-choice-cpd" class="btn btn-primary" data-i18n="addChoiceCpd">Add CPD record</button>
+      <button id="add-choice-planned" class="btn btn-primary" data-i18n="addChoicePlanned">Add upcoming course</button>
+      <button id="add-choice-licence" class="btn btn-primary" data-i18n="addChoiceLicence">Add licence renewal</button>
       <button id="add-choice-reminder" class="btn btn-primary" data-i18n="addChoiceReminder">Add reminder</button>
     </div>
   </div>
 </div>
 
-<script src="i18n.js?v=5"></script>
-<script src="app.js?v=5"></script>
+<script src="i18n.js?v=6"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>
