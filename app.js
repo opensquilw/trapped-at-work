@@ -95,9 +95,11 @@
   function typeLabel(type) { return type ? (type[LANG] || type.en) : ''; }
   function typeById(id) { return state.types.find(t => t.id === id); }
 
+  // Local date, not UTC. toISOString() would return yesterday between midnight
+  // and 08:00 in Hong Kong (UTC+8), making form defaults and the overdue/today
+  // comparisons a day early.
   function todayStr() {
-    const d = new Date();
-    return d.toISOString().slice(0, 10);
+    return toISO(new Date());
   }
   function daysBetweenInclusive(startStr, endStr) {
     const a = new Date(startStr + 'T00:00:00');
@@ -258,18 +260,26 @@
       cpdEl.appendChild(card);
     }
 
-    // licences expiring within 90 days, plus courses in the next 30 — the things
-    // that actually need acting on soon
-    const expiring = [
-      ...state.licences.filter(l => daysUntil(l.expiry) <= 90).map(l => ({ kind: 'licence', obj: l, date: l.expiry })),
-      ...state.planned.filter(p => { const d = daysUntil(p.date); return d >= 0 && d <= 30; }).map(p => ({ kind: 'planned', obj: p, date: p.date })),
-    ].sort((a, b) => a.date.localeCompare(b.date)).slice(0, 5);
+    // licences needing attention in the next 90 days (or already expired)
+    const expiring = state.licences
+      .filter(l => daysUntil(l.expiry) <= 90)
+      .sort((a, b) => a.expiry.localeCompare(b.expiry))
+      .slice(0, 5);
     const expEl = $('#dash-expiring-list');
     expEl.innerHTML = '';
     $('#dash-expiring-head').hidden = expiring.length === 0;
-    expiring.forEach(e => expEl.appendChild(
-      e.kind === 'licence' ? buildLicenceItem(e.obj) : buildPlannedItem(e.obj)
-    ));
+    expiring.forEach(l => expEl.appendChild(buildLicenceItem(l)));
+
+    // every course still ahead, nearest first — not just the next 30 days, so
+    // something booked months out is still visible from the home page
+    const courses = state.planned
+      .filter(p => daysUntil(p.date) >= 0)
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(0, 5);
+    const cEl = $('#dash-courses-list');
+    cEl.innerHTML = '';
+    $('#dash-courses-empty').hidden = courses.length > 0;
+    courses.forEach(p => cEl.appendChild(buildPlannedItem(p)));
 
     // upcoming reminders (not done, sorted by due date), top 5
     const upcoming = state.reminders
@@ -1173,18 +1183,24 @@
     const d = daysUntil(p.date);
     const li = document.createElement('li');
     li.className = 'record-item';
+    // Always show how far away it is — a countdown that only appears in the last
+    // week is useless for something booked months ahead.
     let badge = '';
     if (d < 0) badge = `<span class="badge warn">${t('overdueBadge')}</span>`;
     else if (d === 0) badge = `<span class="badge info">${t('todayBadge')}</span>`;
     else if (d <= 7) badge = `<span class="badge soon">${d} ${t('daysLeftSuffix')}</span>`;
+    else badge = `· ${d} ${t('daysLeftSuffix')}`;
     const linkIcon = p.link
       ? '<svg class="record-link" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M3.9 12a5.1 5.1 0 0 1 5.1-5.1h3V5H9a7 7 0 0 0 0 14h3v-1.9H9A5.1 5.1 0 0 1 3.9 12ZM8 13h8v-2H8v2Zm7-8h-3v1.9h3a5.1 5.1 0 0 1 0 10.2h-3V19h3a7 7 0 0 0 0-14Z"/></svg>'
       : '';
+    // On the Reminders tab the circle consistently means "days away" for both
+    // licences and courses; expected points go in the meta line where they're labelled.
+    const pts = p.points ? ` · ${roundPts(p.points)} ${t('cpdPtsLabel')}` : '';
     li.innerHTML = `
-      <span class="record-pts">${p.points ? p.points : '—'}</span>
+      <span class="record-pts">${d >= 0 ? d : '!'}</span>
       <span class="record-main">
         <span class="record-title">${escapeHtml(p.title)}</span>
-        <span class="record-meta">${formatDate(p.date)}${p.time ? ' ' + p.time : ''}${p.organizer ? ' · ' + escapeHtml(p.organizer) : ''} ${badge}</span>
+        <span class="record-meta">${formatDate(p.date)}${p.time ? ' ' + p.time : ''}${p.organizer ? ' · ' + escapeHtml(p.organizer) : ''}${pts} ${badge}</span>
       </span>
       ${linkIcon}
     `;
@@ -1523,7 +1539,7 @@
   // ---------- init ----------
   // Shown in Settings so it's possible to tell at a glance whether an installed
   // home-screen app is running the current build or a stale cached one.
-  const APP_BUILD = 'build 7 · 2026-09-06';
+  const APP_BUILD = 'build 8 · 2026-09-07';
   $('#build-tag').textContent = APP_BUILD;
 
   load();
