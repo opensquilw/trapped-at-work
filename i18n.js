@@ -93,6 +93,23 @@ const STRINGS = {
   cpdStartHint: { en: 'Your CPD year renews every 12 months from this date\'s month and day.', zh: '進修年度由此日期的月／日起，每 12 個月更新一次。' },
   fCpdTarget: { en: 'Annual point target', zh: '每年目標分數' },
   saveCpdSettings: { en: 'Save CPD settings', zh: '儲存進修設定' },
+
+  // Import
+  settingsImportTitle: { en: 'Import CPD records', zh: '匯入進修記錄' },
+  importHint: {
+    en: 'Load records from a .json file, or paste the data below. Existing records are kept — anything already logged on the same date with the same title is skipped.',
+    zh: '可由 .json 檔案匯入記錄，或喺下面貼上資料。原有記錄會保留，日期同名稱一樣嘅重複記錄會自動略過。',
+  },
+  importFileLabel: { en: 'Choose a .json file', zh: '選擇 .json 檔案' },
+  importPasteLabel: { en: 'Or paste the data here', zh: '或喺呢度貼上資料' },
+  importReplace: { en: 'Replace all existing CPD records instead of merging', zh: '取代所有現有進修記錄（而非合併）' },
+  importReplaceConfirm: { en: 'This will delete every CPD record already on this device and replace them with the imported ones. Continue?', zh: '此操作會刪除本機所有現有進修記錄，並以匯入嘅記錄取代，確定繼續？' },
+  importBtn: { en: 'Import records', zh: '匯入記錄' },
+  importNothing: { en: 'Choose a file or paste the data first.', zh: '請先選擇檔案或貼上資料。' },
+  importBadJson: { en: 'Could not read that — it does not look like valid JSON.', zh: '無法讀取，格式似乎唔係有效嘅 JSON。' },
+  importNoRecords: { en: 'No usable records found in that data.', zh: '資料中找不到可用嘅記錄。' },
+  importedLabel: { en: 'imported', zh: '已匯入' },
+  skippedLabel: { en: 'skipped as duplicates', zh: '重複而略過' },
   settingsLanguage: { en: 'Language', zh: '語言' },
   settingsLeaveTypesTitle: { en: 'Leave types', zh: '假期類別' },
   settingsLeaveTypesHint: { en: 'Set each type\'s annual entitlement, or mark it unlimited to just track usage.', zh: '為每個假期類別設定每年可享日數，或設為「無上限」只記錄使用量。' },

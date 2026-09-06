@@ -1,12 +1,12 @@
-const CACHE_NAME = 'leavetrack-v3';
+const CACHE_NAME = 'leavetrack-v4';
 const ASSETS = [
   './',
   './index.html',
   // Query strings must match the tags in index.html — the cache is keyed on the
-  // full URL, so './app.js' would never serve a request for './app.js?v=3'.
-  './style.css?v=3',
-  './i18n.js?v=3',
-  './app.js?v=3',
+  // full URL, so './app.js' would never serve a request for './app.js?v=4'.
+  './style.css?v=4',
+  './i18n.js?v=4',
+  './app.js?v=4',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',

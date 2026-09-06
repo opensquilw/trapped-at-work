@@ -809,6 +809,96 @@
     showScreen('cpd-screen');
   });
 
+  // ---------- import ----------
+  // Accepts either a bare array of records, or an object with a `cpdRecords`
+  // array, so an exported backup and a hand-built file both work.
+  function extractRecords(parsed) {
+    const list = Array.isArray(parsed) ? parsed
+      : (parsed && Array.isArray(parsed.cpdRecords)) ? parsed.cpdRecords
+      : null;
+    if (!list) return [];
+    const validCats = new Set(CPD_CATEGORIES.map(c => c.id));
+    return list.map(r => {
+      if (!r || typeof r !== 'object') return null;
+      const title = String(r.title || '').trim();
+      const date = String(r.date || '').trim();
+      // must have a title and an ISO date to be usable
+      if (!title || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+      return {
+        title,
+        date,
+        points: Number(r.points) || 0,
+        category: validCats.has(r.category) ? r.category : 'other',
+        location: String(r.location || '').trim(),
+        notes: String(r.notes || '').trim(),
+      };
+    }).filter(Boolean);
+  }
+
+  function dedupeKey(r) {
+    return `${r.date}|${r.title.trim().toLowerCase()}`;
+  }
+
+  function showImportResult(msg, isError) {
+    const el = $('#im-result');
+    el.textContent = msg;
+    el.classList.toggle('error', !!isError);
+    el.hidden = false;
+  }
+
+  function runImport(raw) {
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      showImportResult(t('importBadJson'), true);
+      return;
+    }
+    const incoming = extractRecords(parsed);
+    if (!incoming.length) {
+      showImportResult(t('importNoRecords'), true);
+      return;
+    }
+
+    const replace = $('#im-replace').checked;
+    if (replace && !confirm(t('importReplaceConfirm'))) return;
+    if (replace) {
+      state.cpdRecords.forEach(r => { if (r.hasAttachment) idbDelete(r.id).catch(() => {}); });
+      state.cpdRecords = [];
+    }
+
+    const seen = new Set(state.cpdRecords.map(dedupeKey));
+    let added = 0, skipped = 0;
+    incoming.forEach(r => {
+      const key = dedupeKey(r);
+      if (seen.has(key)) { skipped++; return; }
+      seen.add(key);
+      state.cpdRecords.push({ id: uid(), createdAt: Date.now(), hasAttachment: false, ...r });
+      added++;
+    });
+
+    saveCpdRecords();
+    $('#im-file').value = '';
+    $('#im-text').value = '';
+    $('#im-replace').checked = false;
+    renderAll();
+    showImportResult(`${added} ${t('importedLabel')}, ${skipped} ${t('skippedLabel')}.`, false);
+  }
+
+  $('#im-file').addEventListener('change', ev => {
+    const file = ev.target.files && ev.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => { $('#im-text').value = reader.result; };
+    reader.readAsText(file);
+  });
+
+  $('#im-btn').addEventListener('click', () => {
+    const raw = $('#im-text').value.trim();
+    if (!raw) { showImportResult(t('importNothing'), true); return; }
+    runImport(raw);
+  });
+
   // ---------- settings ----------
   function renderSettings() {
     $$('.seg-btn[data-lang]').forEach(b => b.classList.toggle('active', b.dataset.lang === LANG));

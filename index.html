@@ -12,7 +12,7 @@
 <link rel="manifest" href="manifest.json" />
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
 <link rel="icon" href="icons/icon-192.png" />
-<link rel="stylesheet" href="style.css?v=3" />
+<link rel="stylesheet" href="style.css?v=4" />
 </head>
 <body>
 
@@ -246,6 +246,25 @@
       </div>
     </form>
 
+    <h3 class="section-title" data-i18n="settingsImportTitle">Import CPD records</h3>
+    <p class="hint" data-i18n="importHint">Load records from a .json file, or paste the data below.</p>
+
+    <label for="im-file" data-i18n="importFileLabel">Choose a .json file</label>
+    <input id="im-file" type="file" accept=".json,application/json" />
+
+    <label for="im-text" data-i18n="importPasteLabel">Or paste the data here</label>
+    <textarea id="im-text" rows="4" spellcheck="false"></textarea>
+
+    <div class="checkbox-row">
+      <input id="im-replace" type="checkbox" />
+      <label for="im-replace" data-i18n="importReplace">Replace all existing CPD records</label>
+    </div>
+
+    <div class="form-actions">
+      <button type="button" id="im-btn" class="btn btn-primary" data-i18n="importBtn">Import records</button>
+    </div>
+    <p id="im-result" class="import-result" hidden></p>
+
     <h3 class="section-title" data-i18n="settingsLeaveTypesTitle">Leave types</h3>
     <p class="hint" data-i18n="settingsLeaveTypesHint">Set each type's annual entitlement.</p>
     <ul id="type-list" class="type-list"></ul>
@@ -332,7 +351,7 @@
   </div>
 </div>
 
-<script src="i18n.js?v=3"></script>
-<script src="app.js?v=3"></script>
+<script src="i18n.js?v=4"></script>
+<script src="app.js?v=4"></script>
 </body>
 </html>
