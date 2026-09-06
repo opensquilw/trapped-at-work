@@ -1023,6 +1023,11 @@
   }
 
   // ---------- init ----------
+  // Shown in Settings so it's possible to tell at a glance whether an installed
+  // home-screen app is running the current build or a stale cached one.
+  const APP_BUILD = 'build 5 · 2026-09-06';
+  $('#build-tag').textContent = APP_BUILD;
+
   load();
   applyI18n();
   renderAll();

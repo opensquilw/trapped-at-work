@@ -1,12 +1,12 @@
-const CACHE_NAME = 'leavetrack-v4';
+const CACHE_NAME = 'leavetrack-v5';
 const ASSETS = [
   './',
   './index.html',
   // Query strings must match the tags in index.html — the cache is keyed on the
-  // full URL, so './app.js' would never serve a request for './app.js?v=4'.
-  './style.css?v=4',
-  './i18n.js?v=4',
-  './app.js?v=4',
+  // full URL, so './app.js' would never serve a request for './app.js?v=5'.
+  './style.css?v=5',
+  './i18n.js?v=5',
+  './app.js?v=5',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
@@ -27,8 +27,36 @@ self.addEventListener('activate', e => {
   self.clients.claim();
 });
 
+// Network-first for the app shell (page, scripts, styles) so an installed
+// home-screen app picks up new versions on its next launch instead of serving
+// a stale copy forever. Cache is the offline fallback, not the default source.
+// Everything else (icons) stays cache-first — those are small and stable.
 self.addEventListener('fetch', e => {
-  e.respondWith(
-    caches.match(e.request).then(cached => cached || fetch(e.request))
-  );
+  const req = e.request;
+  if (req.method !== 'GET') return;
+
+  let url;
+  try {
+    url = new URL(req.url);
+  } catch {
+    return;
+  }
+  if (url.origin !== self.location.origin) return;
+
+  const isShell = req.mode === 'navigate' ||
+    ['document', 'script', 'style'].includes(req.destination);
+
+  if (isShell) {
+    e.respondWith(
+      fetch(req)
+        .then(res => {
+          const copy = res.clone();
+          caches.open(CACHE_NAME).then(c => c.put(req, copy)).catch(() => {});
+          return res;
+        })
+        .catch(() => caches.match(req).then(c => c || caches.match('./index.html')))
+    );
+  } else {
+    e.respondWith(caches.match(req).then(c => c || fetch(req)));
+  }
 });
