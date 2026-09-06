@@ -1329,9 +1329,33 @@
       return;
     }
     const incoming = extractRecords(parsed);
-    if (!incoming.length) {
+    // A file may also carry cycle rules, so a whole CPD setup can arrive at once
+    // instead of being retyped on a phone keyboard.
+    const incomingRules = (parsed && parsed.cpdSettings && Array.isArray(parsed.cpdSettings.rules))
+      ? parsed.cpdSettings.rules
+        .filter(r => r && /^\d{4}-\d{2}-\d{2}$/.test(String(r.start || '')))
+        .map(r => ({
+          id: uid(),
+          start: r.start,
+          months: Math.max(1, Number(r.months) || 12),
+          target: Number(r.target) || 0,
+        }))
+      : [];
+
+    if (!incoming.length && !incomingRules.length) {
       showImportResult(t('importNoRecords'), true);
       return;
+    }
+
+    let rulesApplied = 0;
+    if (incomingRules.length) {
+      const existing = cpdRules();
+      // only ask before overwriting cycle settings the user already has
+      if (!existing.length || confirm(t('importRulesConfirm'))) {
+        state.cpdSettings = { rules: incomingRules };
+        saveCpdSettings();
+        rulesApplied = incomingRules.length;
+      }
     }
 
     const replace = $('#im-replace').checked;
@@ -1356,7 +1380,9 @@
     $('#im-text').value = '';
     $('#im-replace').checked = false;
     renderAll();
-    showImportResult(`${added} ${t('importedLabel')}, ${skipped} ${t('skippedLabel')}.`, false);
+    const parts = [`${added} ${t('importedLabel')}, ${skipped} ${t('skippedLabel')}`];
+    if (rulesApplied) parts.push(`${rulesApplied} ${t('importedRulesLabel')}`);
+    showImportResult(parts.join(' · ') + '.', false);
   }
 
   $('#im-file').addEventListener('change', ev => {
@@ -1497,7 +1523,7 @@
   // ---------- init ----------
   // Shown in Settings so it's possible to tell at a glance whether an installed
   // home-screen app is running the current build or a stale cached one.
-  const APP_BUILD = 'build 6 · 2026-09-06';
+  const APP_BUILD = 'build 7 · 2026-09-06';
   $('#build-tag').textContent = APP_BUILD;
 
   load();

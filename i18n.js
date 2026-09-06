@@ -180,6 +180,8 @@ const STRINGS = {
   importNoRecords: { en: 'No usable records found in that data.', zh: '資料中找不到可用嘅記錄。' },
   importedLabel: { en: 'imported', zh: '已匯入' },
   skippedLabel: { en: 'skipped as duplicates', zh: '重複而略過' },
+  importedRulesLabel: { en: 'cycle rule(s) applied', zh: '條週期規則已套用' },
+  importRulesConfirm: { en: 'This file also contains CPD cycle rules. Replace your current cycle settings with them?', zh: '此檔案亦包含進修週期規則，是否以其取代現有週期設定？' },
   settingsLanguage: { en: 'Language', zh: '語言' },
   settingsLeaveTypesTitle: { en: 'Leave types', zh: '假期類別' },
   settingsLeaveTypesHint: { en: 'Set each type\'s annual entitlement, or mark it unlimited to just track usage.', zh: '為每個假期類別設定每年可享日數，或設為「無上限」只記錄使用量。' },
